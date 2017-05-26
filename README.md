@@ -2,6 +2,8 @@
 
 Differs to the original in that it automates the "dns-01" challenge using the Cloudflare API. (revert to using the original's "http-01" challenge using [simp_le](https://github.com/kuba/simp_le) with `CHALLENGE_SCRIPT=simp_le` in your `docker-compose.yml`)
 
+It uses [dehydrated](https://github.com/lukas2511/dehydrated) and the [Cloudflare hook](https://github.com/kappataumu/letsencrypt-cloudflare-hook).
+
 ## Required variables
 
 Required in `docker-compose.yml`:
@@ -22,6 +24,8 @@ But then also obtain the fake root with:
 
 
 ## Example
+
+Go to the Cloudflare DNS settings for your domain (`opyate.com` in my case), and add an A record named `whoami.dev` with IP `0.0.0.0` with the traffic NOT going through Cloudflare (click the little cloud icon to make it grey).
 
 ```yaml
 version: "2"
@@ -74,8 +78,6 @@ networks:
     driver: bridge
 
 ```
-
-Now go to the Cloudflare DNS settings for your domain (`opyate.com` in my case), and add an A record named `whoami.dev` with IP `0.0.0.0` with the traffic NOT going through Cloudflare (click the little cloud icon to make it grey).
 
 `docker-compose up` and go to `https://whoami.dev.opyate.com` and see something like "I'm 3b25e58c55b9".
 
