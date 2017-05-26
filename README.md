@@ -1,3 +1,86 @@
+# This fork
+
+Differs to the original in that it automates the "dns-01" challenge using the Cloudflare API. (revert to using the original's "http-01" challenge using [simp_le](https://github.com/kuba/simp_le) with `CHALLENGE_SCRIPT=simp_le` in your `docker-compose.yml`)
+
+## Required variables
+
+Required in `docker-compose.yml`:
+
+ - `CF_EMAIL`
+ - `CF_KEY`
+
+### Optional variables
+
+`ACME_CA_URI=https://acme-staging.api.letsencrypt.org/directory`
+
+But then also obtain the fake root with:
+
+    curl -s https://acme-staging.api.letsencrypt.org/acme/issuer-cert | \
+        openssl x509 -inform der -outform pem -out FakeLERootX1.pem
+
+...then import and "always trust" `FakeLERootX1.pem` in your key manager. **I recommend this for short-term testing purposes, otherwise you might run into Evil Hacker's fake root and get compromised.**
+
+
+## Example
+
+```yaml
+version: "2"
+services:
+
+  whoami:
+    image: jwilder/whoami
+    container_name: whoami
+    environment:
+      VIRTUAL_HOST: whoami.dev.opyate.com
+      LETSENCRYPT_HOST: whoami.dev.opyate.com
+      LETSENCRYPT_EMAIL: opyate@gmail.com
+    networks:
+      - intranet
+  # https://github.com/JrCs/docker-letsencrypt-nginx-proxy-companion
+  www:
+    image: jwilder/nginx-proxy
+    ports:
+      - "443:443"
+      - "80:80"
+    networks:
+      - intranet
+    volumes:
+      - ./certs:/etc/nginx/certs:ro
+      - /etc/nginx/vhost.d
+      - /usr/share/nginx/html
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+    # The label is needed so that the letsencrypt container
+    # knows which nginx proxy container to use.
+    labels:
+      - "com.github.jrcs.letsencrypt_nginx_proxy_companion.nginx_proxy=true"
+
+  wwwcompanion:
+    # image: jrcs/letsencrypt-nginx-proxy-companion
+    build: docker-letsencrypt-nginx-proxy-companion
+    volumes:
+      - ./certs:/etc/nginx/certs:rw
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    volumes_from:
+      - www
+    networks:
+      - intranet
+    environment:
+      CF_EMAIL: opyate@gmail.com
+      CF_KEY: 7b1d5a387463e0ced69d6254fcf423620ccee
+      ACME_CA_URI: https://acme-staging.api.letsencrypt.org/directory
+
+networks:
+  intranet:
+    driver: bridge
+
+```
+
+Now go to the Cloudflare DNS settings for your domain (`opyate.com` in my case), and add an A record named `whoami.dev` with IP `0.0.0.0` with the traffic NOT going through Cloudflare (click the little cloud icon to make it grey).
+
+`docker-compose up` and go to `https://whoami.dev.opyate.com` and see something like "I'm 3b25e58c55b9".
+
+# Original
+
 [![](https://images.microbadger.com/badges/version/jrcs/letsencrypt-nginx-proxy-companion.svg)](https://hub.docker.com/r/jrcs/letsencrypt-nginx-proxy-companion "Click to view the image on Docker Hub")
 [![](https://images.microbadger.com/badges/image/jrcs/letsencrypt-nginx-proxy-companion.svg)](https://hub.docker.com/r/jrcs/letsencrypt-nginx-proxy-companion "Click to view the image on Docker Hub")
 [![](https://img.shields.io/docker/stars/jrcs/letsencrypt-nginx-proxy-companion.svg)](https://hub.docker.com/r/jrcs/letsencrypt-nginx-proxy-companion "Click to view the image on Docker Hub")
@@ -157,8 +240,8 @@ $ docker run -d \
 
 #### Examples:
 
-If you want other examples how to use this container, look at: 
+If you want other examples how to use this container, look at:
 
 * [Karl Fathi's Examples](https://github.com/fatk/docker-letsencrypt-nginx-proxy-companion-examples)
 * [More examples from Karl](https://github.com/pixelfordinner/pixelcloud-docker-apps/tree/master/nginx-proxy)
-* [George Ilyes' Examples](https://github.com/gilyes/docker-nginx-letsencrypt-sample) 
+* [George Ilyes' Examples](https://github.com/gilyes/docker-nginx-letsencrypt-sample)

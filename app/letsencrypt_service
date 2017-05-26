@@ -6,6 +6,22 @@ seconds_to_wait=3600
 ACME_CA_URI="${ACME_CA_URI:-https://acme-v01.api.letsencrypt.org/directory}"
 ACME_TOS_HASH="${ACME_TOS_HASH:-6373439b9f29d67a5cd4d18cbc7f264809342dbf21cb2ba2fc7588df987a6221}"
 
+if [[ $CHALLENGE_SCRIPT == "simp_le" ]]; then
+  echo "nothing special to do for simp_le"
+else
+  export DEHYDRATED_CONFIG=/app/dehydrated/config
+  rm -f $DEHYDRATED_CONFIG
+  touch $DEHYDRATED_CONFIG
+
+  if [[ $ACME_CA_URI == *"staging"* ]]; then
+    echo "CA=$ACME_CA_URI" >> $DEHYDRATED_CONFIG
+    echo 'CA_TERMS="https://acme-staging.api.letsencrypt.org/terms"' >> $DEHYDRATED_CONFIG
+  fi
+  echo 'CHALLENGETYPE="dns-01"' >> $DEHYDRATED_CONFIG
+  echo 'HOOK="/app/dehydrated/hooks/cloudflare/hook.py"' >> $DEHYDRATED_CONFIG
+  echo 'CERTDIR="/etc/nginx/certs/"' >> $DEHYDRATED_CONFIG
+fi
+
 source /app/functions.sh
 
 create_link() {
@@ -102,15 +118,22 @@ update_certs() {
         done
 
         echo "Creating/renewal $base_domain certificates... (${hosts_array_expanded[*]})"
-        /usr/bin/simp_le \
-            -f account_key.json -f key.pem -f chain.pem -f fullchain.pem -f cert.pem \
-            --tos_sha256 $ACME_TOS_HASH \
-            $params_d_str \
-            --email "${!email_varname}" \
-            --server=$acme_ca_uri \
-            --default_root /usr/share/nginx/html/
-
-        simp_le_return=$?
+        if [[ $CHALLENGE_SCRIPT == "simp_le" ]]; then
+          /usr/bin/simp_le \
+              -f account_key.json -f key.pem -f chain.pem -f fullchain.pem -f cert.pem \
+              --tos_sha256 $ACME_TOS_HASH \
+              $params_d_str \
+              --email "${!email_varname}" \
+              --server=$acme_ca_uri \
+              --default_root /usr/share/nginx/html/
+          challenge_return=$?
+        else
+          /app/dehydrated/dehydrated --register --accept-terms
+          /app/dehydrated/dehydrated -c -d $base_domain
+          challenge_return=$?
+          # for 'create_links':
+          mv privkey.pem key.pem
+        fi
 
         for altnames in ${hosts_array_expanded[@]:1}; do
             # Remove old CN domain that now are altnames
@@ -119,7 +142,7 @@ update_certs() {
 
         for domain in "${!hosts_array}"; do
             create_links $base_domain $domain && reload_nginx='true'
-            [[ $simp_le_return -eq 0 ]] && reload_nginx='true'
+            [[ $challenge_return -eq 0 ]] && reload_nginx='true'
         done
     done
 

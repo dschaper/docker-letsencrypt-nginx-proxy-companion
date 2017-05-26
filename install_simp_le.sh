@@ -13,9 +13,3 @@ git -C /src clone --depth=1 --branch $branch https://github.com/zenhack/simp_le.
 # Install simp_le in /usr/bin
 cd /src/simp_le
 python ./setup.py install
-
-# Make house cleaning
-cd /
-rm -rf /src
-apk del git gcc py-pip musl-dev libffi-dev python-dev openssl-dev
-rm -rf /var/cache/apk/*
