@@ -5,6 +5,7 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 seconds_to_wait=3600
 ACME_CA_URI="${ACME_CA_URI:-https://acme-v01.api.letsencrypt.org/directory}"
 ACME_TOS_HASH="${ACME_TOS_HASH:-6373439b9f29d67a5cd4d18cbc7f264809342dbf21cb2ba2fc7588df987a6221}"
+DEFAULT_KEY_SIZE=4096
 
 if [[ $CHALLENGE_SCRIPT == "simp_le" ]]; then
   echo "nothing special to do for simp_le"
@@ -70,6 +71,12 @@ update_certs() {
         hosts_array=$host_varname[@]
         email_varname="LETSENCRYPT_${cid}_EMAIL"
 
+        keysize_varname="LETSENCRYPT_${cid}_KEYSIZE"
+        cert_keysize="${!keysize_varname}"
+        if [[ "$cert_keysize" == "<no value>" ]]; then
+            cert_keysize=$DEFAULT_KEY_SIZE
+        fi
+
         test_certificate_varname="LETSENCRYPT_${cid}_TEST"
         create_test_certificate=false
         if [[ $(lc "${!test_certificate_varname:-}") == true ]]; then
@@ -78,6 +85,8 @@ update_certs() {
 
         params_d_str=""
         [[ $DEBUG == true ]] && params_d_str+=" -v"
+        [[ $REUSE_KEY == true ]] && params_d_str+=" --reuse_key"
+        [[ "${1}" == "--force-renew" ]] && params_d_str+=" --valid_min 7776000" && shift
 
         hosts_array_expanded=("${!hosts_array}")
         # First domain will be our base domain
@@ -123,6 +132,7 @@ update_certs() {
               -f account_key.json -f key.pem -f chain.pem -f fullchain.pem -f cert.pem \
               --tos_sha256 $ACME_TOS_HASH \
               $params_d_str \
+              --cert_key_size=$cert_keysize \
               --email "${!email_varname}" \
               --server=$acme_ca_uri \
               --default_root /usr/share/nginx/html/
@@ -148,6 +158,11 @@ update_certs() {
 
     [[ "$reload_nginx" == 'true' ]] && reload_nginx
 }
+
+# Allow the script functions to be sourced without starting the Service Loop.
+if [ "${1}" == "--source-only" ]; then
+  return 0
+fi
 
 pid=
 # Service Loop: When this script exits, start it again.
